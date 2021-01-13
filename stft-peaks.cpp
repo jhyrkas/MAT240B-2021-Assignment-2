@@ -63,7 +63,6 @@ double* hann_window() {
 }
 
 int main(int argc, char *argv[]) {
-  std::cout << "Getting data!" << std::endl;
   // take the data in
   //
   std::vector<double> data;
@@ -73,8 +72,6 @@ int main(int argc, char *argv[]) {
     data.push_back(value);
     n++;
   }
-
-  std::cout << "Got all data!" << std::endl;
 
   // put your code here!
   //
@@ -94,7 +91,11 @@ int main(int argc, char *argv[]) {
   int nfft = 8192;
   int window_size = 2048;
 
-  int nframes = ceil(n / hop_size);
+  int nframes = ceil(n / float(hop_size));
+
+  std::cout << "Audio length: " << n << std::endl;
+  std::cout << "N frames: " << nframes << std::endl;
+
   CArray fft_buf(nfft);
   int start_index = 0;
 
@@ -102,7 +103,7 @@ int main(int argc, char *argv[]) {
      // PART 1: create fft buffer
 
      // should deal with size corner cases
-     int end_index = std::min(n, 0+hop_size);
+     int end_index = std::min(n, start_index+hop_size);
 
      int j = 0;
      for (int i = start_index; i < end_index; i++) {
@@ -127,7 +128,17 @@ int main(int argc, char *argv[]) {
      fft(fft_buf);
 
      // PART 3: find peaks
-
+     double max = 0.0;
+     int max_frame = -1;
+     // double check the math here
+     for (int j = 0; j < nfft/2+1; j++) {
+       if (max < std::abs(fft_buf[j])) {
+         max = std::abs(fft_buf[j]);
+         max_frame = j;
+       }
+     }
+     //std::cout << "Max val is " << max << std::endl;
+     std::cout << "Max frame is " << max_frame << std::endl;
      
      // next frame
      start_index += hop_size;
