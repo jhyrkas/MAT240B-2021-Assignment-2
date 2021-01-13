@@ -18,12 +18,54 @@
 //
 
 #include <algorithm>  // std::sort
+#include <cmath>
+#include <complex>
+#include <iostream>
+#include <valarray>
 #include <vector>
+
+// utility functions
+
+// higher memory implementation via http://rosettacode.org/wiki/Fast_Fourier_transform#C.2B.2B
+typedef std::complex<double> Complex;
+typedef std::valarray<Complex> CArray;
+void fft(CArray& x)
+{
+    const size_t N = x.size();
+    if (N <= 1) return;
+ 
+    // divide
+    CArray even = x[std::slice(0, N/2, 2)];
+    CArray  odd = x[std::slice(1, N/2, 2)];
+ 
+    // conquer
+    fft(even);
+    fft(odd);
+ 
+    // combine
+    for (size_t k = 0; k < N/2; ++k)
+    {
+        Complex t = std::polar(1.0, -2 * M_PI * k / N) * odd[k];
+        x[k    ] = even[k] + t;
+        x[k+N/2] = even[k] - t;
+    }
+}
+
+// fixed size for now
+double* hann_window() {
+    static double window[2048];
+
+    for (int i = 0; i < 2048; i++) {
+        window[i] = 0.5 * (1.0 - cos(2.0*M_PI*(i+1)/2049.0));
+    }
+
+    return window;
+}
 
 int main(int argc, char *argv[]) {
   // take the data in
   //
-  vector<double> data;
+  std::vector<double> data;
   double value;
   int n = 0;
   while (std::cin >> value) {
@@ -43,6 +85,51 @@ int main(int argc, char *argv[]) {
   //
   // take N as an argument on the command line.
   //
+
+  double* window = hann_window();
+  int hop_size = 1024;
+  int nfft = 8192;
+  int window_size = 2048;
+
+  int nframes = ceil(n / hop_size);
+  CArray fft_buf(nfft);
+  int start_index = 0;
+
+  for (int fr = 0; fr < nframes; fr++) {
+     // PART 1: create fft buffer
+
+     // should deal with size corner cases
+     int end_index = std::min(n, 0+hop_size);
+
+     int j = 0;
+     for (int i = start_index; i < end_index; i++) {
+        fft_buf[j] = data[i];
+        j++;
+     }
+
+     // zero-pad what's left
+     while (j < nfft) {
+        fft_buf[j] = 0.0;
+        j++;
+     }
+
+     // PART 2: perform FFT
+
+     // apply hann window
+     for (int i = 0; i < window_size; i++) {
+        fft_buf[i] *= window[i];
+     }
+
+     // can't remember if this is the way to do this
+     fft(fft_buf);
+
+     // PART 3: find peaks
+
+     
+     // next frame
+     start_index += hop_size;
+  }
+
 
   return 0;
 }
