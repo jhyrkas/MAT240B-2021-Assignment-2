@@ -63,15 +63,18 @@ double* hann_window() {
 }
 
 int main(int argc, char *argv[]) {
+  std::cout << "Getting data!" << std::endl;
   // take the data in
   //
   std::vector<double> data;
   double value;
   int n = 0;
   while (std::cin >> value) {
-    data[n] = value;
+    data.push_back(value);
     n++;
   }
+
+  std::cout << "Got all data!" << std::endl;
 
   // put your code here!
   //
