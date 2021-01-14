@@ -93,8 +93,8 @@ int main(int argc, char *argv[]) {
   // take N as an argument on the command line.
   //
 
-
-  int N = 4; // fix this later
+  assert(argc > 1);
+  int N = std::stof(argv[1]); // fix this later
 
   double* window = hann_window();
   int SAMPLING_RATE = 48000; // import?
