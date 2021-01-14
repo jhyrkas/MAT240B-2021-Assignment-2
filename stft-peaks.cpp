@@ -26,6 +26,13 @@
 
 // utility functions
 
+// used in fft
+// adapted from: https://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
+
+typedef std::pair<double,double> amp_and_freq;
+bool comparator ( const amp_and_freq& l, const amp_and_freq& r)
+   { return l.first > r.first; } // sort descending
+
 // higher memory implementation via http://rosettacode.org/wiki/Fast_Fourier_transform#C.2B.2B
 typedef std::complex<double> Complex;
 typedef std::valarray<Complex> CArray;
@@ -86,15 +93,16 @@ int main(int argc, char *argv[]) {
   // take N as an argument on the command line.
   //
 
+
+  int N = 4; // fix this later
+
   double* window = hann_window();
+  int SAMPLING_RATE = 48000; // import?
   int hop_size = 1024;
   int nfft = 8192;
   int window_size = 2048;
 
   int nframes = ceil(n / float(hop_size));
-
-  std::cout << "Audio length: " << n << std::endl;
-  std::cout << "N frames: " << nframes << std::endl;
 
   CArray fft_buf(nfft);
   int start_index = 0;
@@ -128,17 +136,22 @@ int main(int argc, char *argv[]) {
      fft(fft_buf);
 
      // PART 3: find peaks
-     double max = 0.0;
-     int max_frame = -1;
-     // double check the math here
+     double bin_step = double(SAMPLING_RATE) / nfft;
+     amp_and_freq spectrogram[nfft/2+1];
+     // don't bother with negative frequencies
      for (int j = 0; j < nfft/2+1; j++) {
-       if (max < std::abs(fft_buf[j])) {
-         max = std::abs(fft_buf[j]);
-         max_frame = j;
+        spectrogram[j] = std::make_pair(std::abs(fft_buf[j]), j * bin_step);
+     }
+
+     std::sort(spectrogram, spectrogram + (nfft/2) + 1, comparator);
+     for (int i = 0; i < N; i++) {
+       std::cout << spectrogram[i].second << "/" << spectrogram[i].first;
+       if (i < N-1) {
+         std::cout << ",";
+       } else {
+         std::cout << std::endl;
        }
      }
-     //std::cout << "Max val is " << max << std::endl;
-     std::cout << "Max frame is " << max_frame << std::endl;
      
      // next frame
      start_index += hop_size;
