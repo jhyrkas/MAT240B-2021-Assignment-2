@@ -13,12 +13,16 @@
 
 #include <algorithm>  // std::sort
 #include <cmath>      // ::sin()
+#include <complex>
+#include <exception>
 #include <iostream>
+#include <valarray>
 #include <vector>
 
 #include "al/app/al_App.hpp"
 #include "al/ui/al_ControlGUI.hpp"
 #include "al/ui/al_Parameter.hpp"
+#include "dr_wav.h"
 
 // define free functions (functions not associated with any class) here
 //
@@ -88,6 +92,120 @@ struct Entry {
   double frequency, amplitude;
 };
 
+
+// from stft-peaks.cpp
+// used in fft
+// adapted from: https://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
+
+typedef std::pair<double,double> amp_and_freq;
+bool comparator ( const amp_and_freq& l, const amp_and_freq& r)
+   { return l.first > r.first; } // sort descending
+
+// higher memory implementation via http://rosettacode.org/wiki/Fast_Fourier_transform#C.2B.2B
+typedef std::complex<double> Complex;
+typedef std::valarray<Complex> CArray;
+void fft(CArray& x)
+{
+    const size_t N = x.size();
+    if (N <= 1) return;
+
+    // divide
+    CArray even = x[std::slice(0, N/2, 2)];
+    CArray  odd = x[std::slice(1, N/2, 2)];
+
+    // conquer
+    fft(even);
+    fft(odd);
+
+    // combine
+    for (size_t k = 0; k < N/2; ++k)
+    {
+        Complex t = std::polar(1.0, -2 * M_PI * k / N) * odd[k];
+        x[k    ] = even[k] + t;
+        x[k+N/2] = even[k] - t;
+    }
+}
+
+// fixed size for now
+double* hann_window() {
+    static double window[2048];
+
+    for (int i = 0; i < 2048; i++) {
+        window[i] = 0.5 * (1.0 - cos(2.0*M_PI*(i+1)/2049.0));
+    }
+
+    return window;
+}
+
+std::vector<std::vector<Entry>> stft_peaks(float* data, int data_length, int N) {
+    std::vector<std::vector<Entry>> entries;
+
+    double* window = hann_window();
+    int hop_size = 1024;
+    int nfft = 8192;
+    int window_size = 2048;
+
+    int nframes = ceil(data_length / float(hop_size));
+
+    CArray fft_buf(nfft);
+    int start_index = 0;
+
+    for (int fr = 0; fr < nframes; fr++) {
+        // PART 1: create fft buffer
+
+        // should deal with size corner cases
+        int end_index = std::min(data_length, start_index+hop_size);
+
+        int j = 0;
+        for (int i = start_index; i < end_index; i++) {
+            fft_buf[j] = data[i];
+            j++;
+        }
+
+        // zero-pad what's left
+        while (j < nfft) {
+            fft_buf[j] = 0.0;
+            j++;
+        }
+
+        // PART 2: perform FFT
+
+        // apply hann window
+        for (int i = 0; i < window_size; i++) {
+            fft_buf[i] *= window[i];
+        }
+
+        // can't remember if this is the way to do this
+        fft(fft_buf);
+
+        // PART 3: find peaks
+        double bin_step = double(SAMPLE_RATE) / nfft;
+        amp_and_freq spectrogram[nfft/2+1];
+        // don't bother with negative frequencies
+        for (int j = 0; j < nfft/2+1; j++) {
+            spectrogram[j] = std::make_pair(std::abs(fft_buf[j]), j * bin_step);
+        }
+
+        std::sort(spectrogram, spectrogram + (nfft/2) + 1, comparator);
+        entries.push_back(std::vector<Entry>());
+        for (int i = 0; i < N; i++) {
+            Entry e = {spectrogram[i].first, spectrogram[i].second};
+            entries[fr].push_back(e);
+        }
+
+        // next frame
+        start_index += hop_size;
+    }
+
+    return entries;
+}
+
+struct MyAppCreationException : public std::exception {
+  virtual const char* what() const throw() {
+    return "Couldn't open WAV file";
+  }
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -99,7 +217,7 @@ struct MyApp : App {
   Parameter t{"t", "", 0.0, "", 0.0f, 1.0f};
   ControlGUI gui;
 
-  int N{16};  // the number of sine oscillators to use
+  int N;  // the number of sine oscillators to use
 
   std::vector<Sine> sine;
   std::vector<std::vector<Entry>> data;
@@ -115,6 +233,22 @@ struct MyApp : App {
     //   + the name of a .wav file
     //   + the number of oscillators N
     // - adapt code from wav-read.cpp
+    
+    // wav-read.cpp
+    drwav* pWav = drwav_open_file(argv[1]);
+    if (pWav == nullptr) {
+        throw MyAppCreationException();
+    }
+
+    float* pSampleData = (float*)malloc((size_t)pWav->totalPCMFrameCount *
+                                      pWav->channels * sizeof(float));
+    drwav_read_f32(pWav, pWav->totalPCMFrameCount, pSampleData);
+
+    drwav_close(pWav);
+
+    N = std::stof(argv[1]);
+
+    data = stft_peaks(pSampleData, pWav->totalPCMFrameCount, N);
   }
 
   void onInit() override {
@@ -206,6 +340,12 @@ struct MyApp : App {
 };
 
 int main(int argc, char *argv[]) {
+    // wav-read.cpp
+    if (argc < 3) {
+        printf("usage: analysis-resynthesis wav-file num-oscs");
+        return 1;
+    }
+
   // MyApp constructor called here, given arguments from the command line
   MyApp app(argc, argv);
 

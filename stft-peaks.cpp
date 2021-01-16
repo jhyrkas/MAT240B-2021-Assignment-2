@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
   //
 
   assert(argc > 1);
-  int N = std::stof(argv[1]); // fix this later
+  int N = std::stof(argv[1]);
 
   double* window = hann_window();
   int SAMPLING_RATE = 48000; // import?
