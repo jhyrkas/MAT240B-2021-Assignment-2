@@ -255,6 +255,7 @@ struct MyApp : App {
     N = std::atoi(argv[2]);
 
     data = stft_peaks(pSampleData, pWav->totalPCMFrameCount, N);
+    free(pSampleData);
 
     // need big time gain normalization here
     double max_amp = 0.0;
@@ -370,18 +371,15 @@ struct MyApp : App {
     }*/
 
     while (io()) {
-      //float i = io.in(0);  // left/mono channel input (if any);
-      //printf("%f\t%lu\t%lu\t%f\n", t_val, low_ind, high_ind,frac_ind);
-
       // add the next sample from each of the N oscillators
       //
       float f = 0;
       for (int n = 0; n < N; n++) {
+        //float freq = data[low_ind][n].frequency;
+        //float amp = data[low_ind][n].amplitude;
+
         float freq = (lower_weight * data[low_ind][n].frequency) + (upper_weight * data[high_ind][n].frequency);
         float amp = ((lower_weight * data[low_ind][n].amplitude) + (upper_weight * data[high_ind][n].amplitude));
-        //if (t.get() > 0.09 && t.get() < 0.1 && n == 0) {
-        //    printf("%f\t%f\n", freq, amp);
-        //}
         sine[n].frequency(freq);
         f += amp*sine[n]();  // XXX update this line to effect amplitude
       }
