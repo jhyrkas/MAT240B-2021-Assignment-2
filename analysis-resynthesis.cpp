@@ -256,7 +256,18 @@ struct MyApp : App {
 
     data = stft_peaks(pSampleData, pWav->totalPCMFrameCount, N);
 
-    // need big time gain reduction here
+    // need big time gain normalization here
+    double max_amp = 0.0;
+    for (int i = 0; i < data.size(); i++) {
+        for (int j = 0; j < N; j++) {
+            max_amp = std::max(max_amp, data[i][j].amplitude);
+        }
+    }
+    for (int i = 0; i < data.size(); i++) {
+        for (int j = 0; j < N; j++) {
+            data[i][j].amplitude /= max_amp;
+        }
+    }
   }
 
   void onInit() override {
@@ -320,28 +331,59 @@ struct MyApp : App {
     // - use linear interpolation
     //
 
-    float frac_ind = t.get() * data.size();
-    int low_ind = int(frac_ind);
-    // handles corner case where t = 1.0, don't want to get index OOB
-    int high_ind = low_ind + 1 == data.size() ? data.size() : low_ind + 1;
+    float t_val = t.get();
+    float frac_ind = t_val * data.size();
+    // need to check for both low and high because t can still be 1.0
+    int low_ind = (int)frac_ind;
+    int high_ind = low_ind + 1;
+    // special checks as t approaches 1.0
+    if (low_ind >= data.size()) {
+        low_ind = data.size() - 1;
+    }
+    if (high_ind >= data.size()) {
+        high_ind = data.size() - 1;
+    }
+
     float upper_weight = frac_ind - low_ind;
     float lower_weight = 1.0 - upper_weight;
-    
+    /*
+    if (low_ind < 0) {
+        printf("oops1\n");
+    }
+    if (low_ind >= data.size()) {
+        printf("oops2\n");
+    }
+    if (high_ind >= data.size()) {
+        printf("oops3\n");
+    }
+    if (lower_weight < 0.0) {
+        printf("oops4\n");
+    }
+    if (lower_weight > 1.0) {
+        printf("oops5\n");
+    }
+    if (upper_weight < 0.0) {
+        printf("oops6\n");
+    }
+    if (upper_weight > 1.0) {
+        printf("oops7\n");
+    }*/
+
     while (io()) {
-      float i = io.in(0);  // left/mono channel input (if any);
+      //float i = io.in(0);  // left/mono channel input (if any);
+      //printf("%f\t%lu\t%lu\t%f\n", t_val, low_ind, high_ind,frac_ind);
 
       // add the next sample from each of the N oscillators
       //
       float f = 0;
       for (int n = 0; n < N; n++) {
         float freq = (lower_weight * data[low_ind][n].frequency) + (upper_weight * data[high_ind][n].frequency);
-        float amp = (lower_weight * data[low_ind][n].amplitude) + (upper_weight * data[high_ind][n].amplitude);
-        if (t.get() > 0.09 && t.get() < 0.1 && n == 0) {
-            printf("%f\t%f\n", freq, amp);
-        }
+        float amp = ((lower_weight * data[low_ind][n].amplitude) + (upper_weight * data[high_ind][n].amplitude));
+        //if (t.get() > 0.09 && t.get() < 0.1 && n == 0) {
+        //    printf("%f\t%f\n", freq, amp);
+        //}
         sine[n].frequency(freq);
         f += amp*sine[n]();  // XXX update this line to effect amplitude
-
       }
       f /= N;  // reduce the amplitude of the result
       io.out(0) = f;
@@ -370,7 +412,9 @@ int main(int argc, char *argv[]) {
     // MyApp constructor called here, given arguments from the command line
     MyApp app(argc, argv);
 
-    app.configureAudio(48000, 512, 2, 1);
+    //app.configureAudio(48000, 512, 2, 1);
+    // seems like i need to really decrease the audio rate to stop clicking
+    app.configureAudio(22050, 512, 2, 1);
 
     // Start the AlloLib framework's "app" construct. This blocks until the app is
     // quit (or it crashes).
