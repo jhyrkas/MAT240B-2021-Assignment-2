@@ -92,13 +92,15 @@ struct Entry {
   double frequency, amplitude;
 };
 
+bool entry_comparator ( const Entry& l, const Entry& r)
+   { return l.frequency < r.frequency; } // sort ascending
 
 // from stft-peaks.cpp
 // used in fft
 // adapted from: https://stackoverflow.com/questions/1577475/c-sorting-and-keeping-track-of-indexes
 
 typedef std::pair<double,double> amp_and_freq;
-bool comparator ( const amp_and_freq& l, const amp_and_freq& r)
+bool amp_freq_comparator ( const amp_and_freq& l, const amp_and_freq& r)
    { return l.first > r.first; } // sort descending
 
 // higher memory implementation via http://rosettacode.org/wiki/Fast_Fourier_transform#C.2B.2B
@@ -186,12 +188,16 @@ std::vector<std::vector<Entry>> stft_peaks(float* data, int data_length, int N) 
             spectrogram[j] = std::make_pair(std::abs(fft_buf[j]), j * bin_step);
         }
 
-        std::sort(spectrogram, spectrogram + (nfft/2) + 1, comparator);
+        // sort and keep the top N
+        std::sort(spectrogram, spectrogram + (nfft/2) + 1, amp_freq_comparator);
         entries.push_back(std::vector<Entry>());
         for (int i = 0; i < N; i++) {
-            Entry e = {spectrogram[i].first, spectrogram[i].second};
+            Entry e = {spectrogram[i].second, spectrogram[i].first};
             entries[fr].push_back(e);
         }
+
+        // re-sort so that entries are sorted low to high in frequency
+        std::sort(entries[fr].begin(), entries[fr].end(), entry_comparator);
 
         // next frame
         start_index += hop_size;
@@ -246,9 +252,11 @@ struct MyApp : App {
 
     drwav_close(pWav);
 
-    N = std::atoi(argv[1]);
+    N = std::atoi(argv[2]);
 
     data = stft_peaks(pSampleData, pWav->totalPCMFrameCount, N);
+
+    // need big time gain reduction here
   }
 
   void onInit() override {
@@ -312,6 +320,13 @@ struct MyApp : App {
     // - use linear interpolation
     //
 
+    float frac_ind = t.get() * data.size();
+    int low_ind = int(frac_ind);
+    // handles corner case where t = 1.0, don't want to get index OOB
+    int high_ind = low_ind + 1 == data.size() ? data.size() : low_ind + 1;
+    float upper_weight = frac_ind - low_ind;
+    float lower_weight = 1.0 - upper_weight;
+    
     while (io()) {
       float i = io.in(0);  // left/mono channel input (if any);
 
@@ -319,10 +334,16 @@ struct MyApp : App {
       //
       float f = 0;
       for (int n = 0; n < N; n++) {
-        f += sine[n]();  // XXX update this line to effect amplitude
+        float freq = (lower_weight * data[low_ind][n].frequency) + (upper_weight * data[high_ind][n].frequency);
+        float amp = (lower_weight * data[low_ind][n].amplitude) + (upper_weight * data[high_ind][n].amplitude);
+        if (t.get() > 0.09 && t.get() < 0.1 && n == 0) {
+            printf("%f\t%f\n", freq, amp);
+        }
+        sine[n].frequency(freq);
+        f += amp*sine[n]();  // XXX update this line to effect amplitude
+
       }
       f /= N;  // reduce the amplitude of the result
-
       io.out(0) = f;
       io.out(1) = f;
     }
@@ -342,10 +363,6 @@ struct MyApp : App {
 int main(int argc, char *argv[]) {
     // wav-read.cpp
     if (argc < 3) {
-        for (int i = 0; i < argc; i++) {
-            printf(argv[i]);
-            printf("\n");
-        }
         printf("usage: analysis-resynthesis wav-file num-oscs");
         return 1;
     }
