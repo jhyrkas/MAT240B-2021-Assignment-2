@@ -246,7 +246,7 @@ struct MyApp : App {
 
     drwav_close(pWav);
 
-    N = std::stof(argv[1]);
+    N = std::atoi(argv[1]);
 
     data = stft_peaks(pSampleData, pWav->totalPCMFrameCount, N);
   }
@@ -342,18 +342,22 @@ struct MyApp : App {
 int main(int argc, char *argv[]) {
     // wav-read.cpp
     if (argc < 3) {
+        for (int i = 0; i < argc; i++) {
+            printf(argv[i]);
+            printf("\n");
+        }
         printf("usage: analysis-resynthesis wav-file num-oscs");
         return 1;
     }
 
-  // MyApp constructor called here, given arguments from the command line
-  MyApp app(argc, argv);
+    // MyApp constructor called here, given arguments from the command line
+    MyApp app(argc, argv);
 
-  app.configureAudio(48000, 512, 2, 1);
+    app.configureAudio(48000, 512, 2, 1);
 
-  // Start the AlloLib framework's "app" construct. This blocks until the app is
-  // quit (or it crashes).
-  app.start();
+    // Start the AlloLib framework's "app" construct. This blocks until the app is
+    // quit (or it crashes).
+    app.start();
 
-  return 0;
+    return 0;
 }
