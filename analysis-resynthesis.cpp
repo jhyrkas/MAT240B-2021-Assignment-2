@@ -49,7 +49,7 @@ double sine(double p) {
   int a = p * n;
   int b = 1 + a;
   double t = p * n - a;
-  if (b > n)  //
+  if (b == n)  //
     b = 0;
   // linear interpolation
   return (1 - t) * table.data[a] + t * table.data[b];
@@ -182,17 +182,30 @@ std::vector<std::vector<Entry>> stft_peaks(float* data, int data_length, int N) 
 
         // PART 3: find peaks
         double bin_step = double(SAMPLE_RATE) / nfft;
-        amp_and_freq spectrogram[nfft/2+1];
+        std::vector<amp_and_freq> peaks;
+        // avoid giving peaks at DC or Nyquist
         // don't bother with negative frequencies
-        for (int j = 0; j < nfft/2+1; j++) {
-            spectrogram[j] = std::make_pair(std::abs(fft_buf[j]), j * bin_step);
+        for (int j = 1; j < nfft/2; j++) {
+            double amp = std::abs(fft_buf[j]);
+            // making one of these >= so that only one value in a plateau is captured
+            if (amp > std::abs(fft_buf[j-1]) && amp >= std::abs(fft_buf[j+1])) {
+                peaks.push_back(std::make_pair(std::abs(fft_buf[j]), j * bin_step));
+            }
         }
 
-        // sort and keep the top N
-        std::sort(spectrogram, spectrogram + (nfft/2) + 1, amp_freq_comparator);
+        std::sort(peaks.begin(), peaks.end(), amp_freq_comparator);
         entries.push_back(std::vector<Entry>());
         for (int i = 0; i < N; i++) {
-            Entry e = {spectrogram[i].second, spectrogram[i].first};
+            // this will be 0 amp anyway, setting this high because of
+            // how i am assigning voices (i.e. voice 0 always gets the
+            // lowest frequency)
+            double freq = SAMPLE_RATE / 2.0;
+            double amp = 0.0;
+            if (i < peaks.size()) {
+                freq = peaks[i].second;
+                amp = peaks[i].first;
+            }
+            Entry e = {freq, amp};
             entries[fr].push_back(e);
         }
 
