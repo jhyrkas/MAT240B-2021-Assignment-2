@@ -72,7 +72,7 @@ struct Phasor {
   double operator()() {
     double value = phase;
     phase += increment;
-    if (phase > 1)  //
+    if (phase >= 1)  //
       phase -= 1;
     return value;
   }

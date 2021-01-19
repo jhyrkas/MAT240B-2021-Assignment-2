@@ -137,15 +137,25 @@ int main(int argc, char *argv[]) {
 
      // PART 3: find peaks
      double bin_step = double(SAMPLING_RATE) / nfft;
-     amp_and_freq spectrogram[nfft/2+1];
+     std::vector<amp_and_freq> peaks;
+     // avoid giving peaks at DC or Nyquist
      // don't bother with negative frequencies
-     for (int j = 0; j < nfft/2+1; j++) {
-        spectrogram[j] = std::make_pair(std::abs(fft_buf[j]), j * bin_step);
+     for (int j = 1; j < nfft/2; j++) {
+        double amp = std::abs(fft_buf[j]);
+        // making one of these >= so that only one value in a plateau is captured
+        if (amp > std::abs(fft_buf[j-1]) && amp >= std::abs(fft_buf[j+1])) {
+            peaks.push_back(std::make_pair(std::abs(fft_buf[j]), j * bin_step));
+        }
      }
 
-     std::sort(spectrogram, spectrogram + (nfft/2) + 1, comparator);
+     std::sort(peaks.begin(), peaks.end(), comparator);
      for (int i = 0; i < N; i++) {
-       std::cout << spectrogram[i].second << "/" << spectrogram[i].first;
+       // maybe we didn't find N peaks? unlikely but...
+       if (i >= peaks.size()) {
+         std::cout << "0.0/0.0";
+       } else {
+         std::cout << peaks[i].second << "/" << peaks[i].first;
+       }
        if (i < N-1) {
          std::cout << ",";
        } else {
